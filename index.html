@@ -252,7 +252,6 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--text);mi
 const SUPA_URL="https://qgczftnuflxvrhlbyelb.supabase.co";
 const SUPA_KEY="sb_publishable_QBvl9D7R4ReR6QxkHrN5ug_ZWmP8RuV";
 const ADMIN_EMAILS=["gsantiestebanhernandez@gmail.com","susanaglzobr94@gmail.com"];
-const CATS_KEY="ferrari_cats_v2";
 const EMOJIS=["💼","✨","💰","🧴","📦","🎯","📱","🌸","💄","🪄","📚","🏆","💡","🎬","🤝","💎","🌟","📊","🔑","🎁"];
 const GRADIENTS=["#b8916a,#d4aa7d","#c4a882,#e8c99a","#8b7355,#b8916a","#d4aa7d,#f0d4a8","#6b5a45,#8b7355","#c9b99a,#e8d4bc","#a08060,#c4a882","#786050,#a08060","#e0c8a8,#f5e8d0","#504030,#786050"];
 const MAT_CATS=["General","Ventas","Productos","Marca personal","Empresa","Libros"];
@@ -264,9 +263,6 @@ const DEFAULT_CATS=[
   {id:"lineas",label:"Líneas de productos",emoji:"📦",g:"#6b5a45,#8b7355"},
 ];
 
-function loadCats(){try{const s=localStorage.getItem(CATS_KEY);return s?JSON.parse(s):DEFAULT_CATS;}catch(e){return DEFAULT_CATS;}}
-function saveCats(c){try{localStorage.setItem(CATS_KEY,JSON.stringify(c));}catch(e){}}
-
 const state={
   view:"login",user:null,token:null,
   videos:[],materiales:[],seen:new Set(),
@@ -275,7 +271,7 @@ const state={
   openCats:new Set(),
   matCatFilter:"all",
   modal:null,
-  cats:loadCats(),
+  cats:DEFAULT_CATS,
 };
 
 const hdrs=()=>({"Content-Type":"application/json","apikey":SUPA_KEY,"Authorization":`Bearer ${state.token||SUPA_KEY}`});
@@ -290,7 +286,29 @@ async function registrarActividad(tipo,refId=null){
   await fetch(SUPA_URL+"/rest/v1/actividad",{method:"POST",headers:{...hdrs(),"Prefer":"return=minimal"},body:JSON.stringify({user_email:state.user.email,tipo,referencia_id:refId})});
 }
 
-async function loadVideos(){
+async function loadCats(){
+  const data=await api("/rest/v1/modulos?order=orden.asc");
+  if(Array.isArray(data)&&data.length>0){
+    state.cats=data.map(m=>({id:m.id,label:m.label,emoji:m.emoji,g:m.gradient}));
+  } else {
+    state.cats=DEFAULT_CATS;
+  }
+}
+
+async function saveCat(cat,isEdit){
+  if(isEdit){
+    await fetch(`${SUPA_URL}/rest/v1/modulos?id=eq.${cat.id}`,{method:"PATCH",headers:hdrs(),body:JSON.stringify({label:cat.label,emoji:cat.emoji,gradient:cat.g})});
+  } else {
+    const maxOrden=state.cats.length+1;
+    await fetch(`${SUPA_URL}/rest/v1/modulos`,{method:"POST",headers:{...hdrs(),"Prefer":"return=representation"},body:JSON.stringify({id:cat.id,label:cat.label,emoji:cat.emoji,gradient:cat.g,orden:maxOrden})});
+  }
+  await loadCats();
+}
+
+async function deleteCat(id){
+  await fetch(`${SUPA_URL}/rest/v1/modulos?id=eq.${id}`,{method:"DELETE",headers:hdrs()});
+  await loadCats();
+}
   state.loading=true;
   renderHero();
   renderMainArea();
@@ -312,7 +330,10 @@ async function loginUser(email,pass){
   if(r.access_token){
     state.user=r.user;state.token=r.access_token;state.view="portal";
     try{localStorage.setItem("af_session",JSON.stringify({user:r.user,token:r.access_token}));}catch(e){}
-    fullRender();loadVideos();loadMateriales();
+    fullRender();
+    await loadCats();
+    await loadVideos();
+    await loadMateriales();
   }
   else return "Credenciales incorrectas";
 }
@@ -834,10 +855,12 @@ function renderModal(){
         <span style="font-size:20px">${cat.emoji}</span>
         <span style="flex:1;font-size:14px;color:var(--text)">${cat.label}</span>
         <button class="conf-btn-icon" data-me="${i}">✏</button>
-        <button class="conf-btn-icon" data-md="${i}">✕</button>
+        <button class="conf-btn-icon" data-md="${cat.id}">✕</button>
       </div>`).join("")+`<button class="btn-gold" id="bam" style="margin-top:16px">+ Nuevo módulo</button>`;
-      c.querySelectorAll("[data-md]").forEach(el=>el.addEventListener("click",()=>{
-        const i=parseInt(el.dataset.md);if(confirm(`¿Eliminar "${state.cats[i].label}"?`)){state.cats.splice(i,1);saveCats(state.cats);renderList();}
+      c.querySelectorAll("[data-md]").forEach(el=>el.addEventListener("click",async()=>{
+        if(confirm(`¿Eliminar "${state.cats.find(c=>c.id===el.dataset.md)?.label}"?`)){
+          await deleteCat(el.dataset.md);renderList();renderAccordion();
+        }
       }));
       c.querySelectorAll("[data-me]").forEach(el=>el.addEventListener("click",()=>{
         closeModal();openModal("modform",{...state.cats[parseInt(el.dataset.me)],index:parseInt(el.dataset.me)});
@@ -878,11 +901,13 @@ function renderModal(){
     div.querySelector("#mbg").addEventListener("click",e=>{if(e.target.id==="mbg")back();});
     div.querySelectorAll("[data-e]").forEach(el=>el.addEventListener("click",()=>{selE=el.dataset.e;div.querySelectorAll("[data-e]").forEach(b=>b.classList.toggle("on",b.dataset.e===selE));}));
     div.querySelectorAll("[data-g]").forEach(el=>el.addEventListener("click",()=>{selG=el.dataset.g;div.querySelectorAll("[data-g]").forEach(b=>b.classList.toggle("on",b.dataset.g===selG));}));
-    div.querySelector("#ms").addEventListener("click",()=>{
+    div.querySelector("#ms").addEventListener("click",async()=>{
       const name=div.querySelector("#mln").value.trim();if(!name)return;
-      if(isEdit)state.cats[data.index]={...state.cats[data.index],label:name,emoji:selE,g:selG};
-      else state.cats.push({id:"m"+Date.now(),label:name,emoji:selE,g:selG});
-      saveCats(state.cats);closeModal();openModal("modules");
+      const btn=div.querySelector("#ms");btn.disabled=true;btn.textContent="Guardando...";
+      const cat={id:isEdit?data.id:"m"+Date.now(),label:name,emoji:selE,g:selG};
+      await saveCat(cat,isEdit);
+      closeModal();openModal("modules");
+      renderAccordion();
     });
     return;
   }
@@ -918,8 +943,7 @@ function renderModal(){
   }
 }
 
-// ── INIT ──────────────────────────────────────────────────────────
-// Restore session if exists
+// ── INIT v2.0 ─────────────────────────────────────────────────────
 try{
   const saved=localStorage.getItem("af_session");
   if(saved){
@@ -928,7 +952,11 @@ try{
   }
 }catch(e){}
 fullRender();
-if(state.view==="portal"){loadVideos();loadMateriales();}
+if(state.view==="portal"){
+  loadCats().then(()=>{renderAccordion();});
+  loadVideos();
+  loadMateriales();
+}
 </script>
 </body>
 </html>
