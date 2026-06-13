@@ -44,7 +44,38 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--text);mi
 .header-nav{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .btn-nav{background:transparent;color:var(--text3);border:1px solid transparent;border-radius:2px;padding:7px 12px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;font-family:'Inter',sans-serif;transition:all .2s;white-space:nowrap}
 .btn-nav:hover,.btn-nav.on{color:var(--gold);border-color:rgba(184,145,106,.3)}
-.hero-section{background:var(--dark);position:relative;overflow:hidden;padding:60px 24px 48px}
+.hamburger{display:none;background:transparent;border:1px solid rgba(184,145,106,.3);color:var(--gold3);width:40px;height:40px;cursor:pointer;font-size:18px;align-items:center;justify-content:center;flex-direction:column;gap:5px;padding:8px}
+.hamburger span{display:block;width:20px;height:1.5px;background:var(--gold3);transition:all .3s}
+.mobile-menu{display:none;position:fixed;inset:0;background:rgba(10,8,5,.97);z-index:200;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.mobile-menu.open{display:flex}
+.mobile-menu-close{position:absolute;top:20px;right:20px;background:transparent;border:1px solid rgba(184,145,106,.3);color:var(--gold3);width:40px;height:40px;cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center}
+.btn-nav-mobile{background:transparent;color:var(--text3);border:none;border-bottom:1px solid rgba(184,145,106,.1);padding:16px 40px;font-size:12px;letter-spacing:3px;text-transform:uppercase;cursor:pointer;font-family:'Inter',sans-serif;width:100%;max-width:280px;text-align:center;transition:color .2s}
+.btn-nav-mobile:hover,.btn-nav-mobile.on{color:var(--gold)}
+@media(max-width:640px){
+  .header-inner{padding:0 16px;height:56px}
+  .header-sub{display:none}
+  .header-nav{display:none}
+  .hamburger{display:flex}
+  .hero-section{padding:36px 16px 28px}
+  .hero-title{font-size:30px}
+  .hero-desc{font-size:15px;margin-bottom:24px}
+  .hero-stats{gap:20px}
+  .hstat-num{font-size:22px}
+  .main{padding:24px 16px 40px}
+  .accordion-header{padding:14px 12px}
+  .accordion-title{font-size:15px}
+  .accordion-prog-wrap{display:none}
+  .conf-row{padding:12px 12px;gap:8px}
+  .conf-num{display:none}
+  .conf-thumb{width:72px;min-width:72px;height:42px}
+  .conf-title{font-size:14px}
+  .conf-actions{flex-direction:row}
+  .mat-grid{grid-template-columns:1fr}
+  .analytics-grid{grid-template-columns:1fr}
+  .modal{padding:24px 16px}
+  .modal-bg{padding:0;align-items:flex-end}
+  .player-modal{border-radius:16px 16px 0 0}
+}.hero-section{background:var(--dark);position:relative;overflow:hidden;padding:60px 24px 48px}
 .hero-section::before{content:'';position:absolute;inset:0;background:url('https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=1400&q=80') center/cover no-repeat;opacity:.08}
 .hero-section::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent,var(--dark))}
 .hero-inner{max-width:1100px;margin:0 auto;position:relative;z-index:2}
@@ -258,7 +289,11 @@ async function loadMateriales(){
 
 async function loginUser(email,pass){
   const r=await api("/auth/v1/token?grant_type=password",{method:"POST",body:JSON.stringify({email,password:pass})});
-  if(r.access_token){state.user=r.user;state.token=r.access_token;state.view="portal";fullRender();loadVideos();loadMateriales();}
+  if(r.access_token){
+    state.user=r.user;state.token=r.access_token;state.view="portal";
+    try{localStorage.setItem("af_session",JSON.stringify({user:r.user,token:r.access_token}));}catch(e){}
+    fullRender();loadVideos();loadMateriales();
+  }
   else return "Credenciales incorrectas";
 }
 
@@ -332,9 +367,24 @@ function fullRender(){
 }
 
 function renderHero(){
-  const el=document.getElementById("hero-section");
-  if(el)el.outerHTML=renderHeroHTML();
-  else fullRender();
+  const hero=document.getElementById("hero-section");
+  const prog=document.getElementById("progress-section");
+  const total=state.videos.length,sc=state.seen.size,pct=total?Math.round(sc/total*100):0;
+  if(hero){
+    hero.querySelector(".hstat-num:nth-child(1)") // update stats inline
+    const nums=hero.querySelectorAll(".hstat-num");
+    if(nums[0])nums[0].textContent=total;
+    if(nums[1])nums[1].textContent=sc;
+    if(nums[2])nums[2].textContent=pct+"%";
+  }
+  if(prog){
+    const fill=prog.querySelector(".progress-bar-fill");
+    const pct2=prog.querySelector(".progress-pct");
+    if(fill)fill.style.width=pct+"%";
+    if(pct2)pct2.textContent=`${sc} / ${total}`;
+  }
+  // If elements don't exist yet, do full render
+  if(!hero||!prog) fullRender();
 }
 
 function renderMainArea(){
@@ -363,6 +413,20 @@ function renderLoginHTML(){
 }
 
 function renderHeaderHTML(){
+  const tabs=[
+    {tab:"capacitaciones",label:"Capacitaciones"},
+    {tab:"materiales",label:"Materiales"},
+    ...(isAdmin()?[{tab:"analiticas",label:"Analíticas"}]:[]),
+  ];
+  const actions=[
+    ...(isAdmin()?[{id:"btn-mods",label:"Módulos"}]:[]),
+    {id:"btn-pass",label:"Contraseña"},
+    {id:"btn-logout",label:"Salir"},
+  ];
+  const allBtns=[...tabs.map(t=>`<button class="btn-nav ${state.activeTab===t.tab?"on":""}" data-tab="${t.tab}">${t.label}</button>`),
+    ...actions.map(a=>`<button class="btn-nav" id="${a.id}">${a.label}</button>`)].join("");
+  const mobileBtns=[...tabs.map(t=>`<button class="btn-nav-mobile ${state.activeTab===t.tab?"on":""}" data-tab="${t.tab}">${t.label}</button>`),
+    ...actions.map(a=>`<button class="btn-nav-mobile" id="m-${a.id}">${a.label}</button>`)].join("");
   return `<header class="header">
     <div class="header-inner">
       <div class="header-brand">
@@ -370,16 +434,15 @@ function renderHeaderHTML(){
         <div class="header-divider"></div>
         <span class="header-sub">Por Comunidad Ferrari</span>
       </div>
-      <nav class="header-nav">
-        <button class="btn-nav ${state.activeTab==="capacitaciones"?"on":""}" data-tab="capacitaciones">Capacitaciones</button>
-        <button class="btn-nav ${state.activeTab==="materiales"?"on":""}" data-tab="materiales">Materiales</button>
-        ${isAdmin()?`<button class="btn-nav ${state.activeTab==="analiticas"?"on":""}" data-tab="analiticas">Analíticas</button>`:""}
-        ${isAdmin()?`<button class="btn-nav" id="btn-mods">Módulos</button>`:""}
-        <button class="btn-nav" id="btn-pass">Contraseña</button>
-        <button class="btn-nav" id="btn-logout">Salir</button>
-      </nav>
+      <nav class="header-nav">${allBtns}</nav>
+      <button class="hamburger" id="hamburger-btn"><span></span><span></span><span></span></button>
     </div>
-  </header>`;
+  </header>
+  <div class="mobile-menu" id="mobile-menu">
+    <button class="mobile-menu-close" id="mobile-menu-close">×</button>
+    <div style="font-family:'Playfair Display',serif;font-size:11px;letter-spacing:3px;color:var(--gold);text-transform:uppercase;margin-bottom:24px">Academia Ferrari</div>
+    ${mobileBtns}
+  </div>`;
 }
 
 function renderHeroHTML(){
@@ -396,7 +459,7 @@ function renderHeroHTML(){
       </div>
     </div>
   </section>
-  <div class="progress-section">
+  <div class="progress-section" id="progress-section">
     <div class="progress-inner">
       <span class="progress-label">Tu progreso</span>
       <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
@@ -530,18 +593,36 @@ function bindLogin(){
 }
 
 function bindHeader(){
-  document.getElementById("btn-logout")?.addEventListener("click",()=>{
+  const closeMobileMenu=()=>document.getElementById("mobile-menu")?.classList.remove("open");
+  const openMobileMenu=()=>document.getElementById("mobile-menu")?.classList.add("open");
+
+  document.getElementById("hamburger-btn")?.addEventListener("click",openMobileMenu);
+  document.getElementById("mobile-menu-close")?.addEventListener("click",closeMobileMenu);
+
+  const logout=()=>{
     Object.assign(state,{user:null,token:null,view:"login",videos:[],materiales:[],seen:new Set(),search:"",openCats:new Set()});
+    try{localStorage.removeItem("af_session");}catch(e){}
     fullRender();
-  });
-  document.getElementById("btn-pass")?.addEventListener("click",()=>openModal("changepass"));
-  document.getElementById("btn-mods")?.addEventListener("click",()=>openModal("modules"));
-  document.querySelectorAll(".btn-nav[data-tab]").forEach(el=>el.addEventListener("click",()=>{
-    state.activeTab=el.dataset.tab;
-    document.querySelectorAll(".btn-nav[data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===state.activeTab));
+  };
+  document.getElementById("btn-logout")?.addEventListener("click",logout);
+  document.getElementById("m-btn-logout")?.addEventListener("click",logout);
+
+  const passModal=()=>openModal("changepass");
+  document.getElementById("btn-pass")?.addEventListener("click",passModal);
+  document.getElementById("m-btn-pass")?.addEventListener("click",()=>{closeMobileMenu();passModal();});
+
+  const modsModal=()=>openModal("modules");
+  document.getElementById("btn-mods")?.addEventListener("click",modsModal);
+  document.getElementById("m-btn-mods")?.addEventListener("click",()=>{closeMobileMenu();modsModal();});
+
+  const switchTab=(tab)=>{
+    state.activeTab=tab;
+    document.querySelectorAll(".btn-nav[data-tab],.btn-nav-mobile[data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===tab));
     renderMainArea();
-    if(state.activeTab==="analiticas")loadAnalytics();
-  }));
+    if(tab==="analiticas")loadAnalytics();
+    closeMobileMenu();
+  };
+  document.querySelectorAll("[data-tab]").forEach(el=>el.addEventListener("click",()=>switchTab(el.dataset.tab)));
 }
 
 function bindMainArea(){
@@ -818,7 +899,16 @@ function renderModal(){
 }
 
 // ── INIT ──────────────────────────────────────────────────────────
+// Restore session if exists
+try{
+  const saved=localStorage.getItem("af_session");
+  if(saved){
+    const s=JSON.parse(saved);
+    if(s.user&&s.token){state.user=s.user;state.token=s.token;state.view="portal";}
+  }
+}catch(e){}
 fullRender();
+if(state.view==="portal"){loadVideos();loadMateriales();}
 </script>
 </body>
 </html>
