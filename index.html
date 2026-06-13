@@ -177,7 +177,12 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--text);mi
 .upload-prog{background:rgba(184,145,106,.1);height:1px;margin:10px 0}
 .upload-prog-fill{height:100%;background:var(--gold);transition:width .3s}
 .modal-bg{position:fixed;inset:0;background:rgba(10,8,5,.85);display:flex;align-items:center;justify-content:center;z-index:999;padding:16px;backdrop-filter:blur(4px)}
-.modal{background:var(--white);padding:36px;width:min(520px,100%);max-height:90vh;overflow-y:auto}
+.modal{background:var(--white);padding:28px 20px;width:min(480px,calc(100vw - 32px));max-height:90vh;overflow-y:auto}
+@media(max-width:640px){
+  .modal-bg{padding:0;align-items:flex-end}
+  .modal{width:100%;border-radius:16px 16px 0 0;padding:24px 16px;max-height:85vh}
+  .player-modal{width:100%;border-radius:16px 16px 0 0}
+}
 .modal-eyebrow{font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
 .modal-title{font-family:'Playfair Display',serif;font-size:24px;color:var(--dark);margin-bottom:24px;font-weight:400}
 .modal-row{display:flex;gap:10px;margin-top:16px}
@@ -495,13 +500,13 @@ function renderMainAreaHTML(){
   if(state.activeTab==="materiales"){
     const mf=state.matCatFilter==="all"?state.materiales:state.materiales.filter(m=>m.categoria===state.matCatFilter);
     return `
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:32px;padding-bottom:20px;border-bottom:1px solid rgba(184,145,106,.15)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid rgba(184,145,106,.15);flex-wrap:wrap;gap:12px">
         <div><p style="font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);margin-bottom:8px">Recursos</p>
-        <h2 style="font-family:'Playfair Display',serif;font-size:28px;color:var(--dark);font-weight:400">Biblioteca de <em style="font-style:italic">materiales</em></h2></div>
-        ${isAdmin()?`<button class="btn-gold" id="btn-add-mat" style="width:auto;padding:10px 24px;font-size:9px">+ Subir material</button>`:""}
+        <h2 style="font-family:'Playfair Display',serif;font-size:clamp(20px,5vw,28px);color:var(--dark);font-weight:400">Biblioteca de <em style="font-style:italic">materiales</em></h2></div>
+        ${isAdmin()?`<button class="btn-gold" id="btn-add-mat" style="width:auto;padding:10px 20px;font-size:9px;white-space:nowrap">+ Subir material</button>`:""}
       </div>
-      <div style="display:flex;gap:0;margin-bottom:28px;border-bottom:1px solid rgba(184,145,106,.15)">
-        ${["all",...MAT_CATS].map(c=>`<button style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;padding:10px 14px;cursor:pointer;border:none;background:transparent;color:${state.matCatFilter===c?"var(--gold)":"var(--text3)"};font-family:'Inter',sans-serif;border-bottom:2px solid ${state.matCatFilter===c?"var(--gold)":"transparent"};margin-bottom:-1px" data-matcat="${c}">${c==="all"?"Todos":c}</button>`).join("")}
+      <div style="display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid rgba(184,145,106,.15);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none">
+        ${["all",...MAT_CATS].map(c=>`<button style="font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:10px 12px;cursor:pointer;border:none;background:transparent;color:${state.matCatFilter===c?"var(--gold)":"var(--text3)"};font-family:'Inter',sans-serif;border-bottom:2px solid ${state.matCatFilter===c?"var(--gold)":"transparent"};margin-bottom:-1px;white-space:nowrap;flex-shrink:0" data-matcat="${c}">${c==="all"?"Todos":c}</button>`).join("")}
       </div>
       ${mf.length===0?`<div class="empty">No hay materiales disponibles aún.</div>`:""}
       <div class="mat-grid">${mf.map(m=>`<div class="pcard">
