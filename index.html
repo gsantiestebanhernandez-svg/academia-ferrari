@@ -333,30 +333,30 @@ async function delCat(id){
 
 
 async function loadMembers(){
-  const r=await fetch(`${SURL}/auth/v1/admin/users?per_page=100`,{headers:{"apikey":SKEY,"Authorization":`Bearer ${S.token}`}});
-  if(!r.ok)return [];
-  const d=await r.json();
-  return Array.isArray(d.users)?d.users:[];
+  const d=await req("/rest/v1/af_miembros?order=created_at.desc");
+  return Array.isArray(d)?d:[];
 }
 
 async function inviteUser(email,password,nombre){
-  // Crear usuario vía admin API
-  const r=await fetch(`${SURL}/auth/v1/admin/users`,{
+  // 1. Crear cuenta en Supabase Auth
+  const r=await fetch(`${SURL}/auth/v1/signup`,{
     method:"POST",
-    headers:{"apikey":SKEY,"Authorization":`Bearer ${S.token}`,"Content-Type":"application/json"},
-    body:JSON.stringify({email,password,email_confirm:true,user_metadata:{nombre}})
+    headers:{"apikey":SKEY,"Content-Type":"application/json"},
+    body:JSON.stringify({email,password})
   });
   const d=await r.json();
-  if(d.id)return null;
-  return d.msg||d.message||d.error_description||"Error al crear usuario";
+  if(!r.ok)return d.msg||d.message||d.error_description||"Error al crear usuario";
+  // 2. Guardar en tabla af_miembros
+  await fetch(`${SURL}/rest/v1/af_miembros`,{
+    method:"POST",
+    headers:{...H(),"Prefer":"return=minimal"},
+    body:JSON.stringify({email,nombre,rol:"miembro"})
+  });
+  return null;
 }
 
-async function deleteUser(uid){
-  const r=await fetch(`${SURL}/auth/v1/admin/users/${uid}`,{
-    method:"DELETE",
-    headers:{"apikey":SKEY,"Authorization":`Bearer ${S.token}`}
-  });
-  return r.ok;
+async function deleteMember(id){
+  await fetch(`${SURL}/rest/v1/af_miembros?id=eq.${id}`,{method:"DELETE",headers:H()});
 }
 
 function toggleSeen(id){
@@ -872,22 +872,22 @@ function renderModal(){
       c.innerHTML=`<div class="loading-txt">Cargando equipo...</div>`;
       const users=await loadMembers();
       const isAdminEmail=u=>ADMINS.includes(u.email);
-      c.innerHTML=users.length===0?`<div class="empty">No hay miembros aún.</div>`:
+      c.innerHTML=users.length===0?
+        `<div class="empty" style="margin-bottom:12px">No hay miembros aún.</div><button class="btn-gold" id="bnm">+ Agregar miembro</button>`:
         users.map(u=>`<div class="mod-row" style="align-items:center">
-          <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold2));display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--dark);font-weight:600;flex-shrink:0">${(u.user_metadata?.nombre||u.email||"?")[0].toUpperCase()}</div>
+          <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold2));display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--dark);font-weight:600;flex-shrink:0">${(u.nombre||u.email||"?")[0].toUpperCase()}</div>
           <div style="flex:1;min-width:0">
-            <p style="font-size:13px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.user_metadata?.nombre||"Sin nombre"}</p>
+            <p style="font-size:13px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.nombre||"Sin nombre"}</p>
             <p style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.email}</p>
           </div>
           <span style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:${isAdminEmail(u)?"var(--gold)":"var(--text3)"};background:${isAdminEmail(u)?"rgba(184,145,106,.15)":"rgba(0,0,0,.04)"};padding:3px 8px;border-radius:4px;flex-shrink:0">${isAdminEmail(u)?"Admin":"Miembro"}</span>
-          <button class="btn-icon-sm" data-uid="${u.id}" data-uemail="${u.email}" title="Eliminar" style="color:#c0392b;flex-shrink:0">✕</button>
+          ${isAdminEmail(u)?"":`<button class="btn-icon-sm" data-mid="${u.id}" data-uemail="${u.email}" title="Eliminar" style="color:#c0392b;flex-shrink:0">✕</button>`}
         </div>`).join("")+`<button class="btn-gold" id="bnm" style="margin-top:14px">+ Agregar miembro</button>`;
-      c.querySelectorAll("[data-uid]").forEach(el=>el.addEventListener("click",async()=>{
+      c.querySelectorAll("[data-mid]").forEach(el=>el.addEventListener("click",async()=>{
         const email=el.dataset.uemail;
-        if(ADMINS.includes(email)){alert("No puedes eliminar un administrador.");return;}
-        if(!confirm(`¿Eliminar a ${email}?`))return;
+        if(!confirm(`¿Eliminar a ${email} del equipo?`))return;
         el.disabled=true;el.textContent="...";
-        await deleteUser(el.dataset.uid);
+        await deleteMember(el.dataset.mid);
         await rl();
       }));
       div.querySelector("#bnm")?.addEventListener("click",()=>{closeModal();openModal("memberform");});
