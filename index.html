@@ -225,7 +225,7 @@ const DEFCATS=[
 ];
 
 const S={
-  view:"login",user:null,token:null,
+  view:"login",user:null,token:null,refresh:null,
   videos:[],mats:[],seen:new Set(),
   search:"",tab:"caps",matCat:"all",
   openCats:new Set(),modal:null,cats:[...DEFCATS],loading:false
@@ -233,8 +233,34 @@ const S={
 
 const H=()=>({"Content-Type":"application/json","apikey":SKEY,"Authorization":`Bearer ${S.token||SKEY}`});
 
+async function refreshSession(){
+  if(!S.refresh)return false;
+  try{
+    const r=await fetch(SURL+"/auth/v1/token?grant_type=refresh_token",{
+      method:"POST",
+      headers:{"apikey":SKEY,"Content-Type":"application/json"},
+      body:JSON.stringify({refresh_token:S.refresh})
+    });
+    const d=await r.json();
+    if(d.access_token){
+      S.token=d.access_token;S.refresh=d.refresh_token;
+      try{localStorage.setItem("af_s",JSON.stringify({user:S.user,token:d.access_token,refresh:d.refresh_token}));}catch(e){}
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
 async function req(path,opts={}){
-  try{const r=await fetch(SURL+path,{headers:H(),...opts});return await r.json();}
+  try{
+    const r=await fetch(SURL+path,{headers:H(),...opts});
+    if(r.status===401){
+      const ok=await refreshSession();
+      if(ok){const r2=await fetch(SURL+path,{headers:H(),...opts});return await r2.json();}
+      doLogout();return null;
+    }
+    return await r.json();
+  }
   catch(e){return null;}
 }
 
@@ -260,8 +286,8 @@ async function loadMats(){
 async function doLogin(email,pass){
   const r=await req("/auth/v1/token?grant_type=password",{method:"POST",body:JSON.stringify({email,password:pass})});
   if(r&&r.access_token){
-    S.user=r.user;S.token=r.access_token;S.view="portal";
-    try{localStorage.setItem("af_s",JSON.stringify({user:r.user,token:r.access_token}));}catch(e){}
+    S.user=r.user;S.token=r.access_token;S.refresh=r.refresh_token;S.view="portal";
+    try{localStorage.setItem("af_s",JSON.stringify({user:r.user,token:r.access_token,refresh:r.refresh_token}));}catch(e){}
     return null;
   }
   return "Credenciales incorrectas";
@@ -981,7 +1007,7 @@ try{
   const saved=localStorage.getItem("af_s");
   if(saved){
     const s=JSON.parse(saved);
-    if(s&&s.user&&s.token){S.user=s.user;S.token=s.token;S.view="portal";}
+    if(s&&s.user&&s.token){S.user=s.user;S.token=s.token;S.refresh=s.refresh||null;S.view="portal";}
   }
 }catch(e){}
 
@@ -990,7 +1016,7 @@ paint();
 if(S.view==="portal"){
   S.loading=true;
   paintMain();
-  Promise.all([loadCats(),loadVideos(),loadMats()]).then(()=>{
+  (S.refresh?refreshSession():Promise.resolve(true)).then(()=>Promise.all([loadCats(),loadVideos(),loadMats()])).then(()=>{
     S.loading=false;
     // Repintar hero con datos actualizados
     const hero=document.querySelector(".hero");
