@@ -331,6 +331,34 @@ async function delCat(id){
   await loadCats();
 }
 
+
+async function loadMembers(){
+  const r=await fetch(`${SURL}/auth/v1/admin/users?per_page=100`,{headers:{"apikey":SKEY,"Authorization":`Bearer ${S.token}`}});
+  if(!r.ok)return [];
+  const d=await r.json();
+  return Array.isArray(d.users)?d.users:[];
+}
+
+async function inviteUser(email,password,nombre){
+  // Crear usuario vía admin API
+  const r=await fetch(`${SURL}/auth/v1/admin/users`,{
+    method:"POST",
+    headers:{"apikey":SKEY,"Authorization":`Bearer ${S.token}`,"Content-Type":"application/json"},
+    body:JSON.stringify({email,password,email_confirm:true,user_metadata:{nombre}})
+  });
+  const d=await r.json();
+  if(d.id)return null;
+  return d.msg||d.message||d.error_description||"Error al crear usuario";
+}
+
+async function deleteUser(uid){
+  const r=await fetch(`${SURL}/auth/v1/admin/users/${uid}`,{
+    method:"DELETE",
+    headers:{"apikey":SKEY,"Authorization":`Bearer ${S.token}`}
+  });
+  return r.ok;
+}
+
 function toggleSeen(id){
   if(S.seen.has(id))S.seen.delete(id);
   else{S.seen.add(id);req("/rest/v1/actividad",{method:"POST",headers:{...H(),"Prefer":"return=minimal"},body:JSON.stringify({user_email:S.user.email,tipo:"capacitacion_vista",referencia_id:id})});}
@@ -393,7 +421,7 @@ function loginHTML(){
 
 function headerHTML(){
   const tabs=[{t:"caps",l:"Capacitaciones"},{t:"mats",l:"Materiales"},...(isAdmin()?[{t:"stats",l:"Analíticas"}]:[])];
-  const acts=[...(isAdmin()?[{id:"bmods",l:"Módulos"}]:[]),{id:"bpass",l:"Contraseña"},{id:"bout",l:"Salir"}];
+  const acts=[...(isAdmin()?[{id:"bmods",l:"Módulos"},{id:"bteam",l:"Equipo"}]:[]),{id:"bpass",l:"Contraseña"},{id:"bout",l:"Salir"}];
   return `<header class="header">
     <div class="header-inner">
       <div class="header-left">
@@ -579,6 +607,8 @@ function bindHeader(){
   document.getElementById("mbpass")?.addEventListener("click",()=>{closeM();openModal("pass");});
   document.getElementById("bmods")?.addEventListener("click",()=>openModal("mods"));
   document.getElementById("mbmods")?.addEventListener("click",()=>{closeM();openModal("mods");});
+  document.getElementById("bteam")?.addEventListener("click",()=>openModal("members"));
+  document.getElementById("mbteam")?.addEventListener("click",()=>{closeM();openModal("members");});
   document.querySelectorAll("[data-tab]").forEach(el=>el.addEventListener("click",()=>{
     S.tab=el.dataset.tab;closeM();
     document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===S.tab));
@@ -832,6 +862,81 @@ function renderModal(){
       const btn=div.querySelector("#mss");btn.disabled=true;btn.textContent="Guardando...";
       await saveCat({id:isEdit?data.id:"m"+Date.now(),label:name,emoji:selE,g:selG},isEdit);
       closeModal();openModal("mods");paintAccordion();
+    });
+    return;
+  }
+
+  if(type==="members"){
+    const rl=async()=>{
+      const c=div.querySelector("#mlist");if(!c)return;
+      c.innerHTML=`<div class="loading-txt">Cargando equipo...</div>`;
+      const users=await loadMembers();
+      const isAdminEmail=u=>ADMINS.includes(u.email);
+      c.innerHTML=users.length===0?`<div class="empty">No hay miembros aún.</div>`:
+        users.map(u=>`<div class="mod-row" style="align-items:center">
+          <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold2));display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--dark);font-weight:600;flex-shrink:0">${(u.user_metadata?.nombre||u.email||"?")[0].toUpperCase()}</div>
+          <div style="flex:1;min-width:0">
+            <p style="font-size:13px;color:var(--text);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.user_metadata?.nombre||"Sin nombre"}</p>
+            <p style="font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${u.email}</p>
+          </div>
+          <span style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:${isAdminEmail(u)?"var(--gold)":"var(--text3)"};background:${isAdminEmail(u)?"rgba(184,145,106,.15)":"rgba(0,0,0,.04)"};padding:3px 8px;border-radius:4px;flex-shrink:0">${isAdminEmail(u)?"Admin":"Miembro"}</span>
+          <button class="btn-icon-sm" data-uid="${u.id}" data-uemail="${u.email}" title="Eliminar" style="color:#c0392b;flex-shrink:0">✕</button>
+        </div>`).join("")+`<button class="btn-gold" id="bnm" style="margin-top:14px">+ Agregar miembro</button>`;
+      c.querySelectorAll("[data-uid]").forEach(el=>el.addEventListener("click",async()=>{
+        const email=el.dataset.uemail;
+        if(ADMINS.includes(email)){alert("No puedes eliminar un administrador.");return;}
+        if(!confirm(`¿Eliminar a ${email}?`))return;
+        el.disabled=true;el.textContent="...";
+        await deleteUser(el.dataset.uid);
+        await rl();
+      }));
+      div.querySelector("#bnm")?.addEventListener("click",()=>{closeModal();openModal("memberform");});
+    };
+    div.innerHTML=`<div class="modal-bg" id="mbg"><div class="modal">
+      <p class="modal-ey">Administración</p>
+      <h3 class="modal-title">Equipo</h3>
+      <div id="mlist"></div>
+      <div class="modal-btns"><button class="btn-mc" id="mcl">Cerrar</button></div>
+    </div></div>`;
+    document.body.appendChild(div);
+    div.querySelector("#mcl").addEventListener("click",closeModal);
+    div.querySelector("#mbg").addEventListener("click",e=>{if(e.target.id==="mbg")closeModal();});
+    rl();return;
+  }
+
+  if(type==="memberform"){
+    div.innerHTML=`<div class="modal-bg" id="mbg"><div class="modal">
+      <p class="modal-ey">Administración</p>
+      <h3 class="modal-title">Agregar miembro</h3>
+      <label class="f-label">Nombre completo</label>
+      <input class="f-inp" id="mfn" placeholder="Ej: María García"/>
+      <label class="f-label">Correo electrónico</label>
+      <input class="f-inp" id="mfe" type="email" placeholder="maria@correo.com"/>
+      <label class="f-label">Contraseña temporal</label>
+      <input class="f-inp" id="mfp" type="password" placeholder="Mínimo 6 caracteres"/>
+      <p class="err-msg" id="mferr" style="display:none"></p>
+      <p class="success-msg" id="mfok" style="display:none">✓ Miembro creado correctamente</p>
+      <div class="modal-btns">
+        <button class="btn-mc" id="mcl">Cancelar</button>
+        <button class="btn-ms" id="mss">Registrar</button>
+      </div>
+    </div></div>`;
+    document.body.appendChild(div);
+    const back=()=>{closeModal();openModal("members");};
+    div.querySelector("#mcl").addEventListener("click",back);
+    div.querySelector("#mbg").addEventListener("click",e=>{if(e.target.id==="mbg")back();});
+    div.querySelector("#mss").addEventListener("click",async()=>{
+      const nombre=div.querySelector("#mfn").value.trim();
+      const email=div.querySelector("#mfe").value.trim();
+      const pass=div.querySelector("#mfp").value;
+      const errEl=div.querySelector("#mferr");errEl.style.display="none";
+      if(!nombre){errEl.textContent="Escribe el nombre";errEl.style.display="block";return;}
+      if(!email||!email.includes("@")){errEl.textContent="Correo inválido";errEl.style.display="block";return;}
+      if(pass.length<6){errEl.textContent="Contraseña mínimo 6 caracteres";errEl.style.display="block";return;}
+      const btn=div.querySelector("#mss");btn.disabled=true;btn.textContent="Registrando...";
+      const err=await inviteUser(email,pass,nombre);
+      if(err){errEl.textContent=err;errEl.style.display="block";btn.disabled=false;btn.textContent="Registrar";}
+      else{div.querySelector("#mfok").style.display="block";setTimeout(()=>{closeModal();openModal("members");},1200);}
     });
     return;
   }
