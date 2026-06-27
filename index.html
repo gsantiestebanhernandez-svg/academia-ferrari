@@ -152,6 +152,8 @@ body{font-family:'Inter',sans-serif;background:var(--cream);color:var(--text);mi
 .player-tit{font-family:'Playfair Display',serif;font-size:16px;color:var(--white);font-weight:400}
 .player-close{background:transparent;border:1px solid rgba(184,145,106,.2);color:var(--text3);width:30px;height:30px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .player-close:hover{border-color:var(--gold);color:var(--gold)}
+.video-embed-wrap{position:relative;padding-bottom:56.25%;height:0;border-radius:10px;overflow:hidden;margin-bottom:0;}
+.video-embed-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none;}
 .player-thumb{position:relative;cursor:pointer}
 .player-thumb img{width:100%;display:block;max-height:340px;object-fit:cover}
 .player-overlay{position:absolute;inset:0;background:rgba(10,8,5,.42);display:flex;align-items:center;justify-content:center}
@@ -265,7 +267,7 @@ async function req(path,opts={}){
 }
 
 function isAdmin(){return ADMINS.includes(S.user?.email);}
-function ytId(url){const m=url&&url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);return m?m[1]:null;}
+function ytId(url){const m=url&&url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/);return m?m[1]:null;}
 
 async function loadCats(){
   const d=await req("/rest/v1/modulos?order=orden.asc");
@@ -718,25 +720,22 @@ function renderModal(){
   if(type==="player"){
     const yt=ytId(data.url);
     const thumb=yt?`https://img.youtube.com/vi/${yt}/hqdefault.jpg`:"https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=660&q=80";
+    const embedSrc=yt?`https://www.youtube.com/embed/${yt}?autoplay=1`:``;
     div.innerHTML=`<div class="modal-bg" id="mbg"><div class="player-wrap">
       <div class="player-head">
         <div><p class="player-ey">Capacitación</p><p class="player-tit">${data.title}</p></div>
         <button class="player-close" id="pcl">×</button>
       </div>
-      <div class="player-thumb" id="pth">
-        <img src="${thumb}" alt=""/>
-        <div class="player-overlay"><div class="player-play"><div class="player-play-tri"></div></div></div>
-      </div>
+      ${yt?`<div class="video-embed-wrap"><iframe src="${embedSrc}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`:`<div class="player-thumb"><img src="${thumb}" alt=""/></div>`}
       <div class="player-body">
         <p class="player-sum">${data.sum}</p>
-        <button class="btn-player" id="pwatch">▶ Ver capacitación completa</button>
+        ${!yt?`<button class="btn-player" id="pwatch">▶ Ver capacitación completa</button>`:""}
       </div>
     </div></div>`;
     document.body.appendChild(div);
     div.querySelector("#pcl").addEventListener("click",closeModal);
     div.querySelector("#mbg").addEventListener("click",e=>{if(e.target.id==="mbg")closeModal();});
-    div.querySelector("#pwatch").addEventListener("click",()=>window.open(data.url,"_blank"));
-    div.querySelector("#pth").addEventListener("click",()=>window.open(data.url,"_blank"));
+    if(!yt){div.querySelector("#pwatch")&&div.querySelector("#pwatch").addEventListener("click",()=>window.open(data.url,"_blank"));}
     return;
   }
 
@@ -1036,3 +1035,4 @@ if(S.view==="portal"){
 </script>
 </body>
 </html>
+
